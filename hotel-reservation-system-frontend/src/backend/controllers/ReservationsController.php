@@ -85,6 +85,33 @@ try {
             $checkOut = $payload['checkOut'] ?? '';
             $status = $payload['status'] ?? 'pending';
             if ($uid <= 0 || $rid <= 0 || $checkIn === '' || $checkOut === '') { http_response_code(400); echo json_encode(['success'=>false,'message'=>'User/Room and dates required']); exit(); }
+
+            // Ensure room is currently available (not cleaning/maintenance/etc.)
+            $roomStatusStmt = $conn->prepare("SELECT status FROM rooms WHERE room_id = ? LIMIT 1");
+            if (!$roomStatusStmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
+            $roomStatusStmt->bind_param('i', $rid);
+            $roomStatusStmt->execute();
+            $roomRes = $roomStatusStmt->get_result();
+            $roomRow = $roomRes->fetch_assoc();
+            if (!$roomRow || strtolower($roomRow['status']) !== 'available') {
+                http_response_code(400);
+                echo json_encode(['success'=>false,'message'=>'Selected room is not available']);
+                exit();
+            }
+
+            // Prevent double booking for overlapping dates (pending/confirmed/checked_in)
+            $overlapStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reservations WHERE room_id = ? AND status IN ('pending','confirmed','checked_in') AND NOT (check_out_date <= ? OR check_in_date >= ?)");
+            if (!$overlapStmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
+            $overlapStmt->bind_param('iss', $rid, $checkIn, $checkOut);
+            $overlapStmt->execute();
+            $overlapRes = $overlapStmt->get_result();
+            $overlapRow = $overlapRes->fetch_assoc();
+            if ($overlapRow && intval($overlapRow['cnt']) > 0) {
+                http_response_code(409);
+                echo json_encode(['success'=>false,'message'=>'Room already booked for the selected dates']);
+                exit();
+            }
+
             $stmt = $conn->prepare("INSERT INTO reservations (user_id, room_id, check_in_date, check_out_date, status, created_at) VALUES (?, ?, ?, ?, ?, NOW())");
             if (!$stmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
             $stmt->bind_param('iisss', $uid, $rid, $checkIn, $checkOut, $status);
@@ -101,6 +128,33 @@ try {
             $checkOut = $payload['checkOut'] ?? '';
             $status = $payload['status'] ?? 'pending';
             if ($id <= 0 || $uid <= 0 || $rid <= 0 || $checkIn === '' || $checkOut === '') { http_response_code(400); echo json_encode(['success'=>false,'message'=>'ID, User/Room and dates required']); exit(); }
+
+            // Ensure room is currently available when updating reservation
+            $roomStatusStmt = $conn->prepare("SELECT status FROM rooms WHERE room_id = ? LIMIT 1");
+            if (!$roomStatusStmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
+            $roomStatusStmt->bind_param('i', $rid);
+            $roomStatusStmt->execute();
+            $roomRes = $roomStatusStmt->get_result();
+            $roomRow = $roomRes->fetch_assoc();
+            if (!$roomRow || strtolower($roomRow['status']) !== 'available') {
+                http_response_code(400);
+                echo json_encode(['success'=>false,'message'=>'Selected room is not available']);
+                exit();
+            }
+
+            // Prevent double booking for overlapping dates, excluding this reservation itself
+            $overlapStmt = $conn->prepare("SELECT COUNT(*) AS cnt FROM reservations WHERE room_id = ? AND reservation_id <> ? AND status IN ('pending','confirmed','checked_in') AND NOT (check_out_date <= ? OR check_in_date >= ?)");
+            if (!$overlapStmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
+            $overlapStmt->bind_param('iiss', $rid, $id, $checkIn, $checkOut);
+            $overlapStmt->execute();
+            $overlapRes = $overlapStmt->get_result();
+            $overlapRow = $overlapRes->fetch_assoc();
+            if ($overlapRow && intval($overlapRow['cnt']) > 0) {
+                http_response_code(409);
+                echo json_encode(['success'=>false,'message'=>'Room already booked for the selected dates']);
+                exit();
+            }
+
             $stmt = $conn->prepare("UPDATE reservations SET user_id=?, room_id=?, check_in_date=?, check_out_date=?, status=? WHERE reservation_id=?");
             if (!$stmt) { http_response_code(500); echo json_encode(['success'=>false,'message'=>'DB prepare failed','error'=>$conn->error]); exit(); }
             $stmt->bind_param('iisssi', $uid, $rid, $checkIn, $checkOut, $status, $id);

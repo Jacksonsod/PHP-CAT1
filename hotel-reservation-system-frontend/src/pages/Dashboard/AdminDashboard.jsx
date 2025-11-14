@@ -14,6 +14,7 @@ import {
   Divider,
 } from '@mui/material';
 import Footer from '../../components/Footer';
+import axios from 'axios';
 
 // A tiny helper to lazy-load Recharts at runtime without breaking the build
 function useRecharts() {
@@ -40,7 +41,6 @@ function useRecharts() {
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
-  // Mock stats — wire these to backend later
   const [stats, setStats] = React.useState({
     revenueThisMonth: 0,
     occupancyRate: 0,
@@ -55,61 +55,96 @@ export default function AdminDashboard() {
   const [latestReservations, setLatestReservations] = React.useState([]);
   const [pendingOps, setPendingOps] = React.useState({ checkins: [], checkouts: [] });
   const [alerts, setAlerts] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState('');
 
-  React.useEffect(() => {
-    // Seed with sample values for a good first run
-    setStats({
-      revenueThisMonth: 32450,
-      occupancyRate: 78,
-      totalBookings: 412,
-      activeUsers: 96,
-    });
+  const base = 'http://localhost/PHP-CAT1/hotel-reservation-system-frontend/src/backend/controllers';
+  const endpoints = {
+    analytics: `${base}/AnalyticsController.php`,
+    receptionStats: `${base}/ReceptionStatsController.php`,
+    reservations: `${base}/ReservationsController.php`,
+    users: `${base}/UsersAdminController.php`,
+  };
 
-    // Last 30 days revenue
-    const today = new Date();
-    const rev = Array.from({ length: 30 }).map((_, i) => {
-      const d = new Date(today);
-      d.setDate(today.getDate() - (29 - i));
-      return {
-        date: `${d.getMonth() + 1}/${d.getDate()}`,
-        revenue: Math.round(800 + Math.random() * 1200),
-      };
-    });
-    setRevenueSeries(rev);
+  const load = React.useCallback(() => {
+    setLoading(true); setError('');
+    // Load analytics (revenue series and occupancy by type)
+    const pAnalytics = axios.get(endpoints.analytics)
+      .then(res => {
+        if (res.data?.success) {
+          const rev = (res.data.data?.revenue || []).map(r => ({
+            date: r.date,
+            revenue: Number(r.revenue || 0),
+          }));
+          setRevenueSeries(rev);
+          const occ = (res.data.data?.occupancyByType || []).map(r => ({
+            name: r.room_type,
+            value: Number(r.occupied || 0),
+          }));
+          setRoomTypeOccupancy(occ);
+          // Compute month-to-date revenue from returned series if dates are within current month
+          const now = new Date();
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const mtd = rev
+            .filter(x => String(x.date).startsWith(`${yyyy}-${mm}`) || /^(\d{1,2})\/(\d{1,2})$/.test(String(x.date)))
+            .reduce((sum, x) => sum + (Number(x.revenue) || 0), 0);
+          setStats(s => ({ ...s, revenueThisMonth: mtd }));
+        } else {
+          throw new Error(res.data?.message || 'Analytics load failed');
+        }
+      });
 
-    // Pie: occupancy by room type
-    setRoomTypeOccupancy([
-      { name: 'Standard', value: 45 },
-      { name: 'Deluxe', value: 30 },
-      { name: 'Suite', value: 25 },
-    ]);
+    // Load today occupancy from reception stats
+    const pReception = axios.get(endpoints.receptionStats)
+      .then(res => {
+        if (res.data?.success) {
+          const occ = Number(res.data.data?.occupancy || 0);
+          setStats(s => ({ ...s, occupancyRate: occ }));
+        } else {
+          throw new Error(res.data?.message || 'Reception stats load failed');
+        }
+      });
 
-    // Bar: booking sources
-    setBookingSources([
-      { source: 'Website', value: 180 },
-      { source: 'Walk-in', value: 90 },
-      { source: 'OTA', value: 120 },
-      { source: 'Phone', value: 22 },
-    ]);
+    // Load reservations list to compute counts and latest
+    const pReservations = axios.get(endpoints.reservations)
+      .then(res => {
+        if (res.data?.success) {
+          const rows = res.data.data || [];
+          setStats(s => ({ ...s, totalBookings: rows.length }));
+          // latest 5 by id descending (assumes API already orders desc)
+          setLatestReservations(rows.slice(0, 5));
+          // pending ops stubs until specific endpoints exist
+          setPendingOps({ checkins: [], checkouts: [] });
+        } else {
+          throw new Error(res.data?.message || 'Reservations load failed');
+        }
+      });
 
-    // Activities
-    setLatestReservations([
-      { id: 1, guest: 'Alice Johnson', room: '201', date: 'Today 10:15' },
-      { id: 2, guest: 'Mark Lee', room: '305', date: 'Today 09:00' },
-      { id: 3, guest: 'Sara Kim', room: '118', date: 'Yesterday 17:40' },
-    ]);
-    setPendingOps({
-      checkins: [ { id: 21, guest: 'Daniel P', room: '104', eta: '14:00' } ],
-      checkouts: [ { id: 37, guest: 'Mila R', room: '506', etd: '11:00' } ],
-    });
-    setAlerts([
-      { id: 'a1', level: 'info', text: 'Backup completed successfully.' },
-      { id: 'a2', level: 'warning', text: '3 rooms marked dirty pending housekeeping.' },
-      { id: 'a3', level: 'error', text: 'High CPU on analytics worker.' },
-    ]);
+    // Load users to compute count
+    const pUsers = axios.get(endpoints.users)
+      .then(res => {
+        if (res.data?.success) {
+          const rows = res.data.data || [];
+          setStats(s => ({ ...s, activeUsers: rows.length }));
+        } else {
+          throw new Error(res.data?.message || 'Users load failed');
+        }
+      });
+
+    Promise.allSettled([pAnalytics, pReception, pReservations, pUsers])
+      .then(results => {
+        const rejected = results.find(r => r.status === 'rejected');
+        if (rejected) {
+          setError(rejected.reason?.message || 'Failed to load dashboard');
+        }
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  const { charts, error } = useRecharts();
+  React.useEffect(() => { load(); }, [load]);
+
+  const { charts, error: chartError } = useRecharts();
 
   const StatCard = ({ title, value, suffix }) => (
     <Card>
@@ -125,6 +160,8 @@ export default function AdminDashboard() {
   return (
     <Box p={3} sx={{ maxWidth: 1200, mx: 'auto', textAlign: 'center' }}>
       <Typography variant="h5" fontWeight={700} mb={2}>Admin Dashboard</Typography>
+      {loading && <Typography color="text.secondary" mb={1}>Loading...</Typography>}
+      {!!error && <Typography color="error" mb={1}>{error}</Typography>}
 
       {/* Stats */}
       <Grid container spacing={2} mb={2}>
@@ -161,7 +198,7 @@ export default function AdminDashboard() {
                 )
               ) : (
                 <Typography color="text.secondary">
-                  {error ? 'Charts unavailable (install recharts)' : 'Loading chart...'}
+                  {chartError ? 'Charts unavailable (install recharts)' : 'Loading chart...'}
                 </Typography>
               )}
             </CardContent>

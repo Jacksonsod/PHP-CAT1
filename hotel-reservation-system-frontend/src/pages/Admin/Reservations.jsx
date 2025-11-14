@@ -16,8 +16,12 @@ export default function Reservations() {
   const [form, setForm] = React.useState({ guest: '', room: '', checkIn: '', checkOut: '', status: 'pending' });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [guests, setGuests] = React.useState([]);
+  const [rooms, setRooms] = React.useState([]);
 
   const endpoint = 'http://localhost/PHP-CAT1/hotel-reservation-system-frontend/src/backend/controllers/ReservationsController.php';
+  const usersEndpoint = 'http://localhost/PHP-CAT1/hotel-reservation-system-frontend/src/backend/controllers/UsersAdminController.php';
+  const roomsEndpoint = 'http://localhost/PHP-CAT1/hotel-reservation-system-frontend/src/backend/controllers/RoomsController.php';
 
   const fetchReservations = React.useCallback(() => {
     setLoading(true);
@@ -38,6 +42,28 @@ export default function Reservations() {
   }, []);
 
   React.useEffect(() => { fetchReservations(); }, [fetchReservations]);
+
+  React.useEffect(() => {
+    axios.get(usersEndpoint)
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setGuests(res.data.data);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch guests error:', err?.response?.status, err?.response?.data || err);
+      });
+
+    axios.get(roomsEndpoint)
+      .then(res => {
+        if (res.data?.success && Array.isArray(res.data.data)) {
+          setRooms(res.data.data);
+        }
+      })
+      .catch(err => {
+        console.error('Fetch rooms error:', err?.response?.status, err?.response?.data || err);
+      });
+  }, []);
 
   const startAdd = () => { setEditing(null); setForm({ guest: '', room: '', checkIn: '', checkOut: '', status: 'pending' }); setOpen(true); };
   const startEdit = (row) => { setEditing(row); setForm({ guest: row.guest, room: row.room, checkIn: row.checkIn, checkOut: row.checkOut, status: row.status }); setOpen(true); };
@@ -149,8 +175,26 @@ export default function Reservations() {
         <DialogTitle>{editing ? 'Edit Reservation' : 'Add Reservation'}</DialogTitle>
         <DialogContent dividers>
           <Box sx={{ display: 'grid', gap: 2, mt: 1 }}>
-            <TextField label="Guest" value={form.guest} onChange={(e) => setForm({ ...form, guest: e.target.value })} required />
-            <TextField label="Room" value={form.room} onChange={(e) => setForm({ ...form, room: e.target.value })} required />
+            <Select
+              displayEmpty
+              value={form.guest}
+              onChange={(e) => setForm({ ...form, guest: e.target.value })}
+            >
+              <MenuItem value="" disabled>Select Guest</MenuItem>
+              {guests.map((g) => (
+                <MenuItem key={g.id} value={g.name}>{g.name}</MenuItem>
+              ))}
+            </Select>
+            <Select
+              displayEmpty
+              value={form.room}
+              onChange={(e) => setForm({ ...form, room: e.target.value })}
+            >
+              <MenuItem value="" disabled>Select Room</MenuItem>
+              {rooms.map((r) => (
+                <MenuItem key={r.id} value={r.number}>{r.number} - {r.hotel} ({r.status})</MenuItem>
+              ))}
+            </Select>
             <TextField label="Check-In" type="date" value={form.checkIn} onChange={(e) => setForm({ ...form, checkIn: e.target.value })} InputLabelProps={{ shrink: true }} required />
             <TextField label="Check-Out" type="date" value={form.checkOut} onChange={(e) => setForm({ ...form, checkOut: e.target.value })} InputLabelProps={{ shrink: true }} required />
             <Select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>

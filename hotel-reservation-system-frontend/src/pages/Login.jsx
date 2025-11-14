@@ -28,11 +28,11 @@ const Login = () => {
                     // set auth context
                     login(user);
 
-                    // ✅ Redirect based on role
-                    if (role === 'admin') navigate('/adminDashboard');
-                    else if (role === 'reception') navigate('/receptionDashboard');
-                    else if (role === 'housekeeping') navigate('/housekeepingDashboard');
-                    else if (role === 'guest') navigate('/guestDashboard');
+                    // Redirect based on role
+                    if (role === 'admin') navigate('/admin-dashboard');
+                    else if (role === 'reception') navigate('/reception-dashboard');
+                    else if (role === 'housekeeping') navigate('/housekeeping-dashboard');
+                    else if (role === 'guest') navigate('/guest-dashboard');
                     else navigate('/');
                 }
             })
