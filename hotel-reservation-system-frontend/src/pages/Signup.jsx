@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import Footer from '../components/Footer';
 import {useNavigate} from "react-router-dom";
+import { useToast } from '../context/ToastContext';
 
 const Signup = () => {
     const [firstName, setFirstName] = useState('');
@@ -10,12 +11,16 @@ const Signup = () => {
     const [password, setPassword] = useState('');
     const [role, setRole] = useState('');
     const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
 
     const Navigate = useNavigate();
+    const toast = useToast();
     
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (loading) return;
+        setLoading(true);
         const name = `${firstName.trim()} ${lastName.trim()}`.trim();
         const form = new URLSearchParams();
         form.append('first_name', firstName.trim());
@@ -38,11 +43,13 @@ const Signup = () => {
                     setPassword('');
                     setRole('');
                     setMessage('');
+                    toast.success(res.data.message || 'Account created successfully. You can now log in.');
                     Navigate('/login');
                 }
                 else{
                     // set error message
                     setMessage(res.data.message);
+                    toast.error(res.data.message || 'Signup failed. Please try again.');
                 }
 
             })
@@ -50,6 +57,10 @@ const Signup = () => {
                 const serverMsg = err?.response?.data?.message;
                 console.error('Signup error:', err?.response?.status, err?.response?.data || err);
                 setMessage(serverMsg || 'Something went wrong. Please try again.');
+                toast.error(serverMsg || 'Signup failed. Please try again.');
+            })
+            .finally(() => {
+                setLoading(false);
             });
     };
 
@@ -128,9 +139,10 @@ const Signup = () => {
 
                     <button
                         type="submit"
-                        className="mt-4 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+                        disabled={loading}
+                        className={`mt-4 bg-blue-600 text-white py-2 rounded ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'}`}
                     >
-                        Signup
+                        {loading ? 'Signing up...' : 'Signup'}
                     </button>
                 </form>
             </div>

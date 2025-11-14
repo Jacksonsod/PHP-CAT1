@@ -1,13 +1,15 @@
 import React from 'react';
 import {
   Box, Typography, Button, Card, CardContent, Grid, Dialog, DialogTitle, DialogContent, DialogActions,
-  TextField, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Select, MenuItem
+  TextField, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
+  Checkbox, TablePagination, Toolbar
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { useToast } from '../../context/ToastContext';
 
 export default function Rooms() {
   const [rows, setRows] = React.useState([]);
@@ -16,8 +18,15 @@ export default function Rooms() {
   const [form, setForm] = React.useState({ hotel: '', number: '', type: 'Standard', price: 0, status: 'available' });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
+  const [search, setSearch] = React.useState('');
+  const [statusFilter, setStatusFilter] = React.useState('');
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(10);
+  const [selected, setSelected] = React.useState([]);
 
   const endpoint = 'http://localhost/PHP-CAT1/hotel-reservation-system-frontend/src/backend/controllers/RoomsController.php';
+
+  const toast = useToast();
 
   const fetchRooms = React.useCallback(() => {
     setLoading(true);
@@ -47,12 +56,39 @@ export default function Rooms() {
     data.append('id', String(id));
     axios.post(endpoint, data)
       .then(res => {
-        if (res.data?.success) setRows(rows.filter(r => r.id !== id));
-        else setError(res.data?.message || 'Delete failed');
+        if (res.data?.success) {
+          setRows(rows.filter(r => r.id !== id));
+          setSelected(prev => prev.filter(x => x !== id));
+          toast.success('Room deleted');
+        } else {
+          setError(res.data?.message || 'Delete failed');
+          toast.error(res.data?.message || 'Delete failed');
+        }
       })
       .catch(err => {
         console.error('Delete room error:', err?.response?.status, err?.response?.data || err);
         setError(err?.response?.data?.message || 'Delete failed');
+        toast.error(err?.response?.data?.message || 'Delete failed');
+      });
+  };
+
+  const removeSelected = () => {
+    if (!selected.length) return;
+    const toDelete = [...selected];
+    Promise.all(toDelete.map(id => {
+      const data = new URLSearchParams();
+      data.append('action', 'delete');
+      data.append('id', String(id));
+      return axios.post(endpoint, data);
+    }))
+      .then(() => {
+        setRows(rows.filter(r => !toDelete.includes(r.id)));
+        setSelected([]);
+        toast.success('Selected rooms deleted');
+      })
+      .catch(err => {
+        console.error('Bulk delete rooms error:', err?.response?.status, err?.response?.data || err);
+        toast.error('Failed to delete some rooms');
       });
   };
 
@@ -74,22 +110,66 @@ export default function Rooms() {
         if (res.data?.success) {
           if (isUpdate) {
             setRows(rows.map(r => r.id === editing.id ? { ...r, ...form } : r));
+            toast.success('Room updated');
           } else {
             const id = res.data.id;
             setRows([{ id, ...form }, ...rows]);
+            toast.success('Room created');
           }
           setOpen(false);
           setEditing(null);
           setForm({ hotel: '', number: '', type: 'Standard', price: 0, status: 'available' });
         } else {
           setError(res.data?.message || 'Save failed');
+          toast.error(res.data?.message || 'Save failed');
         }
       })
       .catch(err => {
         console.error('Save room error:', err?.response?.status, err?.response?.data || err);
         setError(err?.response?.data?.message || 'Save failed');
+        toast.error(err?.response?.data?.message || 'Save failed');
       });
   };
+
+  const handleSelectAllClick = (event) => {
+    if (event.target.checked) {
+      const newSelected = filteredRows.map((n) => n.id);
+      setSelected(newSelected);
+      return;
+    }
+    setSelected([]);
+  };
+
+  const handleRowClick = (id) => {
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      return [...prev, id];
+    });
+  };
+
+  const isSelected = (id) => selected.includes(id);
+
+  const handleChangePage = (_, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  const filteredRows = rows.filter((row) => {
+    const term = search.trim().toLowerCase();
+    const matchesSearch = !term ||
+      String(row.id).includes(term) ||
+      String(row.hotel || '').toLowerCase().includes(term) ||
+      String(row.number || '').toLowerCase().includes(term) ||
+      String(row.type || '').toLowerCase().includes(term);
+    const matchesStatus = !statusFilter || row.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const paginatedRows = filteredRows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   return (
     <Box p={3} sx={{ maxWidth: 1100, mx: 'auto', textAlign: 'center' }}>
@@ -105,6 +185,37 @@ export default function Rooms() {
               <Button variant="contained" startIcon={<AddIcon />} onClick={startAdd}>Add Room</Button>
             </Grid>
           </Grid>
+          <Toolbar sx={{ justifyContent: 'space-between', px: 0, mt: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                size="small"
+                label="Search by hotel / number / type / ID"
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              />
+              <Select
+                size="small"
+                value={statusFilter}
+                displayEmpty
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}
+                sx={{ minWidth: 160 }}
+              >
+                <MenuItem value="">All statuses</MenuItem>
+                <MenuItem value="available">available</MenuItem>
+                <MenuItem value="occupied">occupied</MenuItem>
+                <MenuItem value="dirty">dirty</MenuItem>
+                <MenuItem value="maintenance">maintenance</MenuItem>
+              </Select>
+            </Box>
+            <Button
+              color="error"
+              variant="outlined"
+              disabled={!selected.length}
+              onClick={removeSelected}
+            >
+              Delete selected ({selected.length})
+            </Button>
+          </Toolbar>
           {loading && (
             <Typography color="text.secondary" mt={1}>Loading...</Typography>
           )}
@@ -118,6 +229,15 @@ export default function Rooms() {
         <Table>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  color="primary"
+                  indeterminate={selected.length > 0 && selected.length < filteredRows.length}
+                  checked={filteredRows.length > 0 && selected.length === filteredRows.length}
+                  onChange={handleSelectAllClick}
+                  inputProps={{ 'aria-label': 'select all rooms' }}
+                />
+              </TableCell>
               <TableCell>ID</TableCell>
               <TableCell>Hotel</TableCell>
               <TableCell>Number</TableCell>
@@ -128,8 +248,23 @@ export default function Rooms() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.id}>
+            {paginatedRows.map((row) => {
+              const selectedRow = isSelected(row.id);
+              return (
+              <TableRow
+                key={row.id}
+                hover
+                role="checkbox"
+                aria-checked={selectedRow}
+                selected={selectedRow}
+              >
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    color="primary"
+                    checked={selectedRow}
+                    onChange={() => handleRowClick(row.id)}
+                  />
+                </TableCell>
                 <TableCell>{row.id}</TableCell>
                 <TableCell>{row.hotel}</TableCell>
                 <TableCell>{row.number}</TableCell>
@@ -141,10 +276,20 @@ export default function Rooms() {
                   <IconButton size="small" color="error" onClick={() => remove(row.id)}><DeleteIcon /></IconButton>
                 </TableCell>
               </TableRow>
-            ))}
+            );})}
           </TableBody>
         </Table>
       </TableContainer>
+
+      <TablePagination
+        component="div"
+        count={filteredRows.length}
+        page={page}
+        onPageChange={handleChangePage}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={handleChangeRowsPerPage}
+        rowsPerPageOptions={[5, 10, 25, 50]}
+      />
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editing ? 'Edit Room' : 'Add Room'}</DialogTitle>
