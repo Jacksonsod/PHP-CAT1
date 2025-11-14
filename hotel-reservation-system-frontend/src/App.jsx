@@ -1,6 +1,6 @@
 import React from 'react';
 import './index.css';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -20,8 +20,42 @@ import RoomStatus from './pages/Reception/RoomStatus';
 import HousekeepingDashboard from './pages/Dashboard/HousekeepingDashboard';
 import GuestDashboard from './pages/Dashboard/GuestDashboard';
 import ProtectedRoute from './components/Common/ProtectedRoute';
+import { useAuth } from './context/AuthContext';
+import { useToast } from './context/ToastContext';
 
 export default function App() {
+    const { user, logout } = useAuth();
+    const toast = useToast();
+    const navigate = useNavigate();
+    const location = useLocation();
+
+    React.useEffect(() => {
+        if (!user) return;
+
+        const INACTIVITY_LIMIT_MS = 3 * 60 * 1000; // 3 minutes
+        let timeoutId;
+
+        const handleLogout = () => {
+            logout();
+            toast.info('You were logged out due to inactivity');
+            navigate('/login');
+        };
+
+        const resetTimer = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            timeoutId = setTimeout(handleLogout, INACTIVITY_LIMIT_MS);
+        };
+
+        const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'];
+        events.forEach((ev) => window.addEventListener(ev, resetTimer));
+        resetTimer();
+
+        return () => {
+            events.forEach((ev) => window.removeEventListener(ev, resetTimer));
+            if (timeoutId) clearTimeout(timeoutId);
+        };
+    }, [user, logout, toast, navigate, location.pathname]);
+
     return (
         <>
             <Header />

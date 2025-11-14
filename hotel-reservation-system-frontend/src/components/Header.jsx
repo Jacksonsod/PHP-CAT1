@@ -10,6 +10,9 @@ import {
   ListItem,
   ListItemText,
   Box,
+  Avatar,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +25,7 @@ export default function Header() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { user, role, logout, isAdmin, isReception, isHousekeeping, isGuest } = useAuth();
   const [mode, setMode] = useState(() => localStorage.getItem('ui:mode') || 'light');
+  const [avatarAnchorEl, setAvatarAnchorEl] = useState(null);
 
   const toggleMode = () => {
     const next = mode === 'light' ? 'dark' : 'light';
@@ -79,6 +83,20 @@ export default function Header() {
     setDrawerOpen(false);
   };
 
+  const handleAvatarClick = (event) => {
+    setAvatarAnchorEl(event.currentTarget);
+  };
+
+  const handleAvatarClose = () => {
+    setAvatarAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    handleAvatarClose();
+    logout();
+    navigate('/');
+  };
+
   return (
     <>
       <AppBar position="static" color="primary">
@@ -111,8 +129,26 @@ export default function Header() {
 
           {user ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="body2">{user.name} ({role})</Typography>
-              <Button color="inherit" onClick={() => { logout(); navigate('/'); }}>Logout</Button>
+              <Typography variant="body2" sx={{ display: { xs: 'none', sm: 'block' } }}>
+                {user.name} ({role})
+              </Typography>
+              <IconButton color="inherit" onClick={handleAvatarClick} size="small">
+                <Avatar sx={{ width: 32, height: 32 }}>
+                  {user?.name
+                    ? user.name.charAt(0).toUpperCase()
+                    : (user?.email ? user.email.charAt(0).toUpperCase() : 'U')}
+                </Avatar>
+              </IconButton>
+              <Menu
+                anchorEl={avatarAnchorEl}
+                open={Boolean(avatarAnchorEl)}
+                onClose={handleAvatarClose}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+             >
+                <MenuItem disabled>{user?.email || ''}</MenuItem>
+                <MenuItem onClick={handleLogout}>Logout</MenuItem>
+              </Menu>
             </Box>
           ) : (
             <>

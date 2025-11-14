@@ -16,9 +16,11 @@ import {
 } from '@mui/material';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ReceptionDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [overview, setOverview] = React.useState({ arrivals: 0, departures: 0, occupancy: 0 });
   const [pendingCheckins, setPendingCheckins] = React.useState([]);
   const [pendingCheckouts, setPendingCheckouts] = React.useState([]);

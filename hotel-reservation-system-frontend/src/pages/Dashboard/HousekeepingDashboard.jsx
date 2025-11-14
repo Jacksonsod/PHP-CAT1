@@ -1,9 +1,11 @@
 import React from 'react';
-import { Box, Grid, Card, CardContent, CardHeader, Typography, Button, List, ListItem, ListItemText, Chip } from '@mui/material';
+import { Box, Grid, Card, CardContent, CardHeader, Typography, Button, List, ListItem, ListItemText, Chip, Avatar, Stack } from '@mui/material';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
 
 export default function HousekeepingDashboard() {
+  const { user } = useAuth();
   const [dirtyRooms, setDirtyRooms] = React.useState([]);
   const [maintenanceRooms, setMaintenanceRooms] = React.useState([]);
   const [recentlyCleaned, setRecentlyCleaned] = React.useState([]);

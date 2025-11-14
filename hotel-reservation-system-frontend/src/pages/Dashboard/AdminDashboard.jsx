@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import Footer from '../../components/Footer';
 import axios from 'axios';
+import { useAuth } from '../../context/AuthContext';
 
 // A tiny helper to lazy-load Recharts at runtime without breaking the build
 function useRecharts() {
@@ -40,6 +41,7 @@ function useRecharts() {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [stats, setStats] = React.useState({
     revenueThisMonth: 0,
