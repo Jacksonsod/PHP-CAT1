@@ -15,7 +15,7 @@ export default function Hotels() {
   const [rows, setRows] = React.useState([]);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
-  const [form, setForm] = React.useState({ name: '', location: '', description: '' });
+  const [form, setForm] = React.useState({ name: '', location: '', description: '', image: null });
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [search, setSearch] = React.useState('');
@@ -47,8 +47,8 @@ export default function Hotels() {
 
   React.useEffect(() => { fetchHotels(); }, [fetchHotels]);
 
-  const startAdd = () => { setEditing(null); setForm({ name: '', location: '', description: '' }); setOpen(true); };
-  const startEdit = (row) => { setEditing(row); setForm({ name: row.name, location: row.location, description: row.description }); setOpen(true); };
+  const startAdd = () => { setEditing(null); setForm({ name: '', location: '', description: '', image: null }); setOpen(true); };
+  const startEdit = (row) => { setEditing(row); setForm({ name: row.name, location: row.location, description: row.description, image: null }); setOpen(true); };
   const remove = (id) => {
     const formData = new URLSearchParams();
     formData.append('action', 'delete');
@@ -94,27 +94,32 @@ export default function Hotels() {
   const save = () => {
     if (!form.name.trim() || !form.location.trim()) return;
     const isUpdate = Boolean(editing?.id);
-    const formData = new URLSearchParams();
+
+    const formData = new FormData();
     formData.append('action', isUpdate ? 'update' : 'create');
     if (isUpdate) formData.append('id', String(editing.id));
     formData.append('name', form.name.trim());
     formData.append('location', form.location.trim());
     formData.append('description', form.description.trim());
 
-    axios.post(endpoint, formData)
+    if (form.image) {
+      formData.append('image', form.image);
+    }
+
+    axios.post(endpoint, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
       .then(res => {
         if (res.data?.success) {
           if (isUpdate) {
-            setRows(rows.map(r => r.id === editing.id ? { ...r, ...form } : r));
+            setRows(rows.map(r => r.id === editing.id ? { ...r, name: form.name, location: form.location, description: form.description } : r));
             toast.success('Hotel updated');
           } else {
             const id = res.data.id;
-            setRows([{ id, ...form }, ...rows]);
+            setRows([{ id, name: form.name, location: form.location, description: form.description }, ...rows]);
             toast.success('Hotel created');
           }
           setOpen(false);
           setEditing(null);
-          setForm({ name: '', location: '', description: '' });
+          setForm({ name: '', location: '', description: '', image: null });
         } else {
           setError(res.data?.message || 'Save failed');
           toast.error(res.data?.message || 'Save failed');
@@ -277,6 +282,16 @@ export default function Hotels() {
             <TextField label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             <TextField label="Location" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} required />
             <TextField label="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} multiline rows={3} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  image: e.target.files && e.target.files[0] ? e.target.files[0] : null,
+                })
+              }
+            />
           </Box>
         </DialogContent>
         <DialogActions>
