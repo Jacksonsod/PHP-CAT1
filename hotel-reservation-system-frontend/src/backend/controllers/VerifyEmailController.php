@@ -75,7 +75,7 @@ try {
     }
 
     if ((int)$user['is_verified'] === 1) {
-        echo json_encode(["success" => true, "message" => "Email already verified."]);
+        header('Location: http://localhost:5173/login?verified=1');
         exit();
     }
 
@@ -96,7 +96,7 @@ try {
     $ok = $update->execute();
 
     if ($ok) {
-        echo json_encode(["success" => true, "message" => "Email verified successfully. You can now log in."]);
+        header('Location: http://localhost:5173/login?verified=1');
         exit();
     }
 

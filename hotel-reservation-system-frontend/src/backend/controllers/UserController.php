@@ -240,6 +240,8 @@ try {
                         '<p>Hello ' . $safeName . ',</p>' .
                         '<p>Please verify your email address by clicking the button below:</p>' .
                         '<p><a href="' . $safeUrl . '" style="display:inline-block;padding:10px 20px;background-color:#2563eb;color:#ffffff;text-decoration:none;border-radius:4px;">Verify Email</a></p>' .
+                        '<p>If the button does not work (for example, if this email is in your spam folder), copy and paste this link into your browser:</p>' .
+                        '<p><a href="' . $safeUrl . '">' . $safeUrl . '</a></p>' .
                         '<p>If you did not create an account, you can ignore this email.</p>';
 
                     $mail->AltBody =
