@@ -28,15 +28,24 @@ try {
     }
 
     // Determine available name columns
-    $hasNameCol = false; $hasFirstCol = false; $hasLastCol = false;
+    $hasNameCol = false; $hasFirstCol = false; $hasLastCol = false; $hasVerifiedCol = false;
     if ($res = $conn->query("SHOW COLUMNS FROM users LIKE 'name'")) { $hasNameCol = $res->num_rows > 0; $res->free(); }
     if ($res = $conn->query("SHOW COLUMNS FROM users LIKE 'first_name'")) { $hasFirstCol = $res->num_rows > 0; $res->free(); }
     if ($res = $conn->query("SHOW COLUMNS FROM users LIKE 'last_name'")) { $hasLastCol = $res->num_rows > 0; $res->free(); }
+    if ($res = $conn->query("SHOW COLUMNS FROM users LIKE 'is_verified'")) { $hasVerifiedCol = $res->num_rows > 0; $res->free(); }
 
     if ($hasNameCol) {
-        $sql = "SELECT user_id, name, email, password_hash, role FROM users WHERE email = ?";
+        if ($hasVerifiedCol) {
+            $sql = "SELECT user_id, name, email, password_hash, role, is_verified FROM users WHERE email = ?";
+        } else {
+            $sql = "SELECT user_id, name, email, password_hash, role FROM users WHERE email = ?";
+        }
     } elseif ($hasFirstCol && $hasLastCol) {
-        $sql = "SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, email, password_hash, role FROM users WHERE email = ?";
+        if ($hasVerifiedCol) {
+            $sql = "SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, email, password_hash, role, is_verified FROM users WHERE email = ?";
+        } else {
+            $sql = "SELECT user_id, CONCAT(first_name, ' ', last_name) AS name, email, password_hash, role FROM users WHERE email = ?";
+        }
     } else {
         http_response_code(500);
         echo json_encode(["success" => false, "message" => "Users table missing name columns."]); 
@@ -56,6 +65,17 @@ try {
 
     if ($result && $result->num_rows === 1) {
         $user = $result->fetch_assoc();
+
+        // If email verification is enabled (is_verified column exists), block unverified users
+        if ($hasVerifiedCol && isset($user['is_verified']) && (int)$user['is_verified'] === 0) {
+            http_response_code(403);
+            echo json_encode([
+                "success" => false,
+                "message" => "Please verify your email before logging in."
+            ]);
+            exit();
+        }
+
         if (password_verify($data->password, $user['password_hash'])) {
             $role = $user['role'];
             echo json_encode([
